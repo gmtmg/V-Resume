@@ -52,19 +52,56 @@ export function InterviewSession({ question, onComplete }: InterviewSessionProps
   useEffect(() => {
     const initCamera = async () => {
       try {
+        // Use soft constraints (ideal) instead of hard constraints for mobile compatibility
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 1280, height: 720, facingMode: 'user' },
-          audio: true,
+          video: {
+            width: { ideal: 1280, min: 640 },
+            height: { ideal: 720, min: 480 },
+            facingMode: 'user',
+          },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+          },
         });
         streamRef.current = stream;
 
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
+          // For iOS Safari: ensure video plays inline
+          videoRef.current.setAttribute('playsinline', 'true');
+          videoRef.current.setAttribute('webkit-playsinline', 'true');
           await videoRef.current.play();
         }
         setIsStreamReady(true);
       } catch (error) {
         console.error('Camera init error:', error);
+        // Provide more specific error handling for mobile
+        if (error instanceof DOMException) {
+          if (error.name === 'NotAllowedError') {
+            console.error('Camera/mic permission denied');
+          } else if (error.name === 'NotFoundError') {
+            console.error('No camera/mic found');
+          } else if (error.name === 'OverconstrainedError') {
+            // Fallback: try with minimal constraints
+            console.warn('Overconstrained, retrying with minimal constraints');
+            try {
+              const fallbackStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'user' },
+                audio: true,
+              });
+              streamRef.current = fallbackStream;
+              if (videoRef.current) {
+                videoRef.current.srcObject = fallbackStream;
+                await videoRef.current.play();
+              }
+              setIsStreamReady(true);
+              return;
+            } catch (fallbackError) {
+              console.error('Fallback also failed:', fallbackError);
+            }
+          }
+        }
       }
     };
     initCamera();
@@ -208,6 +245,7 @@ export function InterviewSession({ question, onComplete }: InterviewSessionProps
           className="absolute inset-0 w-full h-full object-cover opacity-0 pointer-events-none"
           style={{ transform: 'scaleX(-1)' }}
           playsInline
+          autoPlay
           muted
         />
 

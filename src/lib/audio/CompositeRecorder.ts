@@ -46,7 +46,15 @@ export class CompositeRecorder {
     await this.pitchShifter.connectSource(this.options.audioStream);
 
     // Get canvas stream (avatar video)
-    const canvasStream = this.canvas.captureStream(30); // 30 FPS
+    // Check if captureStream is supported (not available on older iOS versions)
+    if (!this.canvas.captureStream) {
+      throw new Error('Canvas captureStream is not supported on this browser');
+    }
+
+    // Use lower framerate on mobile for better performance
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const frameRate = isMobile ? 24 : 30;
+    const canvasStream = this.canvas.captureStream(frameRate);
 
     // Get pitch-shifted audio stream
     const audioStream = this.pitchShifter.getOutputStream();
@@ -69,12 +77,24 @@ export class CompositeRecorder {
     // Determine supported MIME type
     const mimeType = this.getSupportedMimeType();
 
-    // Create MediaRecorder
-    this.mediaRecorder = new MediaRecorder(this.combinedStream, {
-      mimeType,
+    // Create MediaRecorder with appropriate options
+    const recorderOptions: MediaRecorderOptions = {
       videoBitsPerSecond: this.options.videoBitsPerSecond ?? 2500000,
       audioBitsPerSecond: this.options.audioBitsPerSecond ?? 128000,
-    });
+    };
+
+    // Only set mimeType if we found a supported one
+    if (mimeType) {
+      recorderOptions.mimeType = mimeType;
+    }
+
+    try {
+      this.mediaRecorder = new MediaRecorder(this.combinedStream, recorderOptions);
+    } catch (err) {
+      console.warn('[CompositeRecorder] Failed with options, trying without mimeType:', err);
+      // Fallback: let browser choose format
+      this.mediaRecorder = new MediaRecorder(this.combinedStream);
+    }
 
     this.mediaRecorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
@@ -85,21 +105,38 @@ export class CompositeRecorder {
 
   // Get supported MIME type
   private getSupportedMimeType(): string {
-    const types = [
-      'video/webm;codecs=vp9,opus',
-      'video/webm;codecs=vp8,opus',
-      'video/webm;codecs=h264,opus',
-      'video/webm',
-      'video/mp4',
-    ];
+    // Check if we're on iOS Safari (which has limited MediaRecorder support)
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+    // iOS Safari prefers MP4/H.264
+    const types = isIOS || isSafari
+      ? [
+          'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+          'video/mp4;codecs=h264,aac',
+          'video/mp4',
+          'video/webm;codecs=h264,opus',
+          'video/webm;codecs=vp8,opus',
+          'video/webm',
+        ]
+      : [
+          'video/webm;codecs=vp9,opus',
+          'video/webm;codecs=vp8,opus',
+          'video/webm;codecs=h264,opus',
+          'video/webm',
+          'video/mp4',
+        ];
 
     for (const type of types) {
       if (MediaRecorder.isTypeSupported(type)) {
+        console.log('[CompositeRecorder] Using MIME type:', type);
         return type;
       }
     }
 
-    return 'video/webm';
+    // Fallback - let browser decide
+    console.warn('[CompositeRecorder] No preferred MIME type supported, using default');
+    return '';
   }
 
   // Start recording

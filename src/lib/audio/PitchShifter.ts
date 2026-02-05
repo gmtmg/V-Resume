@@ -26,7 +26,9 @@ export class PitchShifter {
   private inputBufferPos: number = 0;
 
   constructor(options: PitchShifterOptions = {}) {
-    this.audioContext = new AudioContext();
+    // Use webkitAudioContext for iOS Safari compatibility
+    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    this.audioContext = new AudioContextClass();
     this.pitchRatio = options.pitchRatio ?? 0.75; // デフォルトで少し低い声
     this.grainSize = options.grainSize ?? 512;
     this.destinationNode = this.audioContext.createMediaStreamDestination();
@@ -50,9 +52,15 @@ export class PitchShifter {
   async initialize(): Promise<void> {
     if (this.isInitialized) return;
 
-    // Resume audio context if suspended
+    // Resume audio context if suspended (required for iOS Safari)
     if (this.audioContext.state === 'suspended') {
-      await this.audioContext.resume();
+      try {
+        await this.audioContext.resume();
+      } catch (err) {
+        console.warn('[PitchShifter] Failed to resume AudioContext:', err);
+        // On iOS, this may fail if not triggered by user interaction
+        // The context will be resumed on first user interaction
+      }
     }
 
     this.isInitialized = true;

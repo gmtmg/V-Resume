@@ -54,9 +54,16 @@ export function useMediaPipe(options: UseMediaPipeOptions = {}): UseMediaPipeRet
       try {
         console.log('[MediaPipe] Starting initialization...');
 
-        const vision = await FilesetResolver.forVisionTasks(
-          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+        // Use specific version instead of @latest for better caching on mobile
+        const wasmUrl = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm';
+
+        // Add timeout for slow mobile connections
+        const visionPromise = FilesetResolver.forVisionTasks(wasmUrl);
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('WASM load timeout')), 30000)
         );
+
+        const vision = await Promise.race([visionPromise, timeoutPromise]);
         console.log('[MediaPipe] FilesetResolver loaded');
 
         // Try GPU first, fall back to CPU if not available
@@ -127,7 +134,8 @@ export function useMediaPipe(options: UseMediaPipeOptions = {}): UseMediaPipeRet
 
     const video = videoRef.current;
 
-    if (video.readyState >= 2) {
+    // Check if video is ready and has valid dimensions (important for mobile)
+    if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
       try {
         const startTimeMs = performance.now();
         const results = faceLandmarkerRef.current.detectForVideo(video, startTimeMs);

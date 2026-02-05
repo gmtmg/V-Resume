@@ -24,7 +24,12 @@ export default function InterviewPage() {
     // Check if we have camera/mic permissions
     navigator.mediaDevices
       .getUserMedia({ video: true, audio: true })
-      .then(() => setIsReady(true))
+      .then((stream) => {
+        // Stop all tracks immediately after permission check to release resources
+        // This prevents resource conflicts when InterviewSession requests its own stream
+        stream.getTracks().forEach((track) => track.stop());
+        setIsReady(true);
+      })
       .catch(() => {
         // Redirect to system check if no permissions
         router.push('/system-check');

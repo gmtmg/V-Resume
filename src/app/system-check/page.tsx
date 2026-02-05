@@ -3,12 +3,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
-type PermissionStatus = 'pending' | 'granted' | 'denied' | 'error';
+type PermissionStatus = 'pending' | 'granted' | 'denied' | 'error' | 'unsupported';
 
 interface CheckStatus {
   camera: PermissionStatus;
   microphone: PermissionStatus;
   faceDetection: PermissionStatus;
+  browserSupport: PermissionStatus;
 }
 
 export default function SystemCheckPage() {
@@ -20,12 +21,14 @@ export default function SystemCheckPage() {
     camera: 'pending',
     microphone: 'pending',
     faceDetection: 'pending',
+    browserSupport: 'pending',
   });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const allGranted = status.camera === 'granted' &&
                      status.microphone === 'granted' &&
-                     status.faceDetection === 'granted';
+                     status.faceDetection === 'granted' &&
+                     status.browserSupport === 'granted';
 
   useEffect(() => {
     return () => {
@@ -39,15 +42,45 @@ export default function SystemCheckPage() {
   const requestPermissions = async () => {
     setErrorMessage(null);
 
+    // Check browser compatibility first
+    const checkBrowserSupport = () => {
+      const hasGetUserMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+      const hasMediaRecorder = typeof MediaRecorder !== 'undefined';
+      const hasAudioContext = typeof AudioContext !== 'undefined' || typeof (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext !== 'undefined';
+
+      // Check for canvas captureStream support
+      const testCanvas = document.createElement('canvas');
+      const hasCaptureStream = typeof testCanvas.captureStream === 'function';
+
+      return hasGetUserMedia && hasMediaRecorder && hasAudioContext && hasCaptureStream;
+    };
+
+    if (!checkBrowserSupport()) {
+      setErrorMessage('このブラウザはサポートされていません。Safari、Chrome、またはFirefoxの最新版をお使いください。');
+      setStatus(prev => ({
+        ...prev,
+        browserSupport: 'unsupported',
+      }));
+      return;
+    }
+
+    setStatus(prev => ({
+      ...prev,
+      browserSupport: 'granted',
+    }));
+
     try {
-      // Request camera and microphone
+      // Request camera and microphone with soft constraints for mobile compatibility
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: 1280, min: 640 },
+          height: { ideal: 720, min: 480 },
           facingMode: 'user',
         },
-        audio: true,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
       });
 
       streamRef.current = stream;
@@ -83,25 +116,70 @@ export default function SystemCheckPage() {
       if (error instanceof DOMException) {
         if (error.name === 'NotAllowedError') {
           setErrorMessage('カメラ・マイクへのアクセスが拒否されました。ブラウザの設定から許可してください。');
-          setStatus({
+          setStatus(prev => ({
+            ...prev,
             camera: 'denied',
             microphone: 'denied',
             faceDetection: 'denied',
-          });
+          }));
         } else if (error.name === 'NotFoundError') {
           setErrorMessage('カメラまたはマイクが見つかりません。デバイスが接続されているか確認してください。');
-          setStatus({
+          setStatus(prev => ({
+            ...prev,
             camera: 'error',
             microphone: 'error',
             faceDetection: 'error',
-          });
+          }));
+        } else if (error.name === 'OverconstrainedError') {
+          // Retry with minimal constraints for mobile devices
+          console.warn('Overconstrained, retrying with minimal constraints');
+          try {
+            const fallbackStream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: 'user' },
+              audio: true,
+            });
+            streamRef.current = fallbackStream;
+            if (videoRef.current) {
+              videoRef.current.srcObject = fallbackStream;
+              await videoRef.current.play();
+            }
+            const videoTrack = fallbackStream.getVideoTracks()[0];
+            const audioTrack = fallbackStream.getAudioTracks()[0];
+            setStatus(prev => ({
+              ...prev,
+              camera: videoTrack ? 'granted' : 'denied',
+              microphone: audioTrack ? 'granted' : 'denied',
+            }));
+            setTimeout(() => {
+              setStatus(prev => ({ ...prev, faceDetection: 'granted' }));
+            }, 1500);
+            return;
+          } catch (fallbackError) {
+            console.error('Fallback also failed:', fallbackError);
+            setErrorMessage('カメラの解像度に対応できません。別のブラウザをお試しください。');
+            setStatus(prev => ({
+              ...prev,
+              camera: 'error',
+              microphone: 'error',
+              faceDetection: 'error',
+            }));
+          }
+        } else if (error.name === 'NotReadableError') {
+          setErrorMessage('カメラまたはマイクが他のアプリで使用中です。他のアプリを閉じてからお試しください。');
+          setStatus(prev => ({
+            ...prev,
+            camera: 'error',
+            microphone: 'error',
+            faceDetection: 'error',
+          }));
         } else {
           setErrorMessage(`エラーが発生しました: ${error.message}`);
-          setStatus({
+          setStatus(prev => ({
+            ...prev,
             camera: 'error',
             microphone: 'error',
             faceDetection: 'error',
-          });
+          }));
         }
       }
     }
@@ -127,6 +205,14 @@ export default function SystemCheckPage() {
           <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center">
             <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </div>
+        );
+      case 'unsupported':
+        return (
+          <div className="w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center">
+            <svg className="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
         );
@@ -157,6 +243,7 @@ export default function SystemCheckPage() {
             className="w-full h-full object-cover mirror"
             style={{ transform: 'scaleX(-1)' }}
             playsInline
+            autoPlay
             muted
           />
           {status.camera === 'pending' && (
@@ -173,6 +260,10 @@ export default function SystemCheckPage() {
           </h2>
 
           <div className="space-y-3">
+            <div className="flex items-center justify-between py-2">
+              <span className="text-gray-700 dark:text-gray-300">ブラウザ互換性</span>
+              <StatusIcon status={status.browserSupport} />
+            </div>
             <div className="flex items-center justify-between py-2">
               <span className="text-gray-700 dark:text-gray-300">カメラ</span>
               <StatusIcon status={status.camera} />
