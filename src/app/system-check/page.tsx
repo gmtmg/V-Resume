@@ -24,6 +24,7 @@ export default function SystemCheckPage() {
     browserSupport: 'pending',
   });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
 
   const allGranted = status.camera === 'granted' &&
                      status.microphone === 'granted' &&
@@ -41,6 +42,19 @@ export default function SystemCheckPage() {
 
   const requestPermissions = async () => {
     setErrorMessage(null);
+
+    // Check HTTPS requirement (required for getUserMedia on mobile)
+    const isSecureContext = window.isSecureContext;
+    const isLocalhost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+
+    if (!isSecureContext && !isLocalhost) {
+      setErrorMessage('セキュリティ上の理由から、HTTPS接続が必要です。URLが「https://」で始まっていることを確認してください。');
+      setStatus(prev => ({
+        ...prev,
+        browserSupport: 'unsupported',
+      }));
+      return;
+    }
 
     // Check browser compatibility first
     const checkBrowserSupport = () => {
@@ -70,30 +84,59 @@ export default function SystemCheckPage() {
     }));
 
     try {
-      // Request camera and microphone with soft constraints for mobile compatibility
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 1280, min: 640 },
-          height: { ideal: 720, min: 480 },
-          facingMode: 'user',
-        },
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
-      });
+      // Start with simple constraints for maximum mobile compatibility
+      // iOS Safari especially needs simple constraints first
+      let stream: MediaStream;
+
+      try {
+        // First try: simple constraints (most compatible)
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' },
+          audio: true,
+        });
+      } catch (simpleError) {
+        console.warn('Simple constraints failed, trying with specific constraints:', simpleError);
+        // Second try: with specific constraints
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1280, min: 640 },
+            height: { ideal: 720, min: 480 },
+            facingMode: 'user',
+          },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+          },
+        });
+      }
 
       streamRef.current = stream;
 
       // Display video preview
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+        // Wait for video to be ready before playing (important for mobile)
+        await new Promise<void>((resolve) => {
+          const video = videoRef.current!;
+          video.onloadedmetadata = () => {
+            video.play()
+              .then(() => resolve())
+              .catch((playError) => {
+                console.warn('Video play error (may need user interaction):', playError);
+                resolve(); // Continue anyway
+              });
+          };
+          // Timeout fallback
+          setTimeout(resolve, 2000);
+        });
       }
 
       // Check tracks
       const videoTrack = stream.getVideoTracks()[0];
       const audioTrack = stream.getAudioTracks()[0];
+
+      console.log('Camera track:', videoTrack?.label, videoTrack?.getSettings());
+      console.log('Audio track:', audioTrack?.label, audioTrack?.getSettings());
 
       setStatus(prev => ({
         ...prev,
@@ -113,9 +156,29 @@ export default function SystemCheckPage() {
     } catch (error) {
       console.error('Permission error:', error);
 
+      // Set debug info
+      const errorDetails = error instanceof Error
+        ? `${error.name}: ${error.message}`
+        : String(error);
+      setDebugInfo(`エラー詳細: ${errorDetails}\nUserAgent: ${navigator.userAgent.substring(0, 100)}`);
+
       if (error instanceof DOMException) {
         if (error.name === 'NotAllowedError') {
-          setErrorMessage('カメラ・マイクへのアクセスが拒否されました。ブラウザの設定から許可してください。');
+          // Detect device type for specific instructions
+          const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+          const isAndroid = /Android/.test(navigator.userAgent);
+
+          let helpMessage = 'カメラ・マイクへのアクセスが拒否されました。';
+
+          if (isIOS) {
+            helpMessage += '\n\n【iPhoneの場合】\n1. 「設定」アプリを開く\n2. 「Safari」（または使用中のブラウザ）を選択\n3. 「カメラ」と「マイク」を「許可」に設定\n4. このページを再読み込み';
+          } else if (isAndroid) {
+            helpMessage += '\n\n【Androidの場合 - Chromeアプリの権限確認】\n1. 「設定」アプリを開く\n2. 「アプリ」→「Chrome」を選択\n3. 「権限」をタップ\n4. 「カメラ」と「マイク」を「許可」に変更\n5. このページを再読み込み\n\n【それでも解決しない場合】\nChromeのアドレスバー左の鍵アイコン→「権限」から許可してください。';
+          } else {
+            helpMessage += '\n\nブラウザのアドレスバー付近にあるカメラアイコンをクリックして許可してください。';
+          }
+
+          setErrorMessage(helpMessage);
           setStatus(prev => ({
             ...prev,
             camera: 'denied',
@@ -131,11 +194,12 @@ export default function SystemCheckPage() {
             faceDetection: 'error',
           }));
         } else if (error.name === 'OverconstrainedError') {
+          setErrorMessage('カメラの設定に対応できませんでした。最小限の設定で再試行します...');
           // Retry with minimal constraints for mobile devices
           console.warn('Overconstrained, retrying with minimal constraints');
           try {
             const fallbackStream = await navigator.mediaDevices.getUserMedia({
-              video: { facingMode: 'user' },
+              video: true,
               audio: true,
             });
             streamRef.current = fallbackStream;
@@ -150,12 +214,17 @@ export default function SystemCheckPage() {
               camera: videoTrack ? 'granted' : 'denied',
               microphone: audioTrack ? 'granted' : 'denied',
             }));
+            setErrorMessage(null);
             setTimeout(() => {
               setStatus(prev => ({ ...prev, faceDetection: 'granted' }));
             }, 1500);
             return;
           } catch (fallbackError) {
             console.error('Fallback also failed:', fallbackError);
+            const fallbackDetails = fallbackError instanceof Error
+              ? `${fallbackError.name}: ${fallbackError.message}`
+              : String(fallbackError);
+            setDebugInfo(prev => `${prev}\n\nフォールバックエラー: ${fallbackDetails}`);
             setErrorMessage('カメラの解像度に対応できません。別のブラウザをお試しください。');
             setStatus(prev => ({
               ...prev,
@@ -279,8 +348,20 @@ export default function SystemCheckPage() {
           </div>
 
           {errorMessage && (
-            <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
-              <p className="text-red-600 dark:text-red-400 text-sm">{errorMessage}</p>
+            <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg space-y-3">
+              <p className="text-red-600 dark:text-red-400 text-sm whitespace-pre-line">{errorMessage}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="text-sm text-primary-600 dark:text-primary-400 underline"
+              >
+                ページを再読み込み
+              </button>
+              {debugInfo && (
+                <details className="mt-2">
+                  <summary className="text-xs text-gray-500 cursor-pointer">技術的な詳細</summary>
+                  <pre className="text-xs text-gray-400 mt-1 whitespace-pre-wrap break-all">{debugInfo}</pre>
+                </details>
+              )}
             </div>
           )}
         </div>
