@@ -19,6 +19,8 @@ export function InterviewSession({ question, onComplete }: InterviewSessionProps
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [isFaceDetected, setIsFaceDetected] = useState(false);
   const [shouldStop, setShouldStop] = useState(false);
+  const [isStreamReady, setIsStreamReady] = useState(false);
+  const [isAvatarReady, setIsAvatarReady] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -60,6 +62,7 @@ export function InterviewSession({ question, onComplete }: InterviewSessionProps
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
         }
+        setIsStreamReady(true);
       } catch (error) {
         console.error('Camera init error:', error);
       }
@@ -67,7 +70,14 @@ export function InterviewSession({ question, onComplete }: InterviewSessionProps
     initCamera();
   }, []);
 
-  // Initialize recorder when canvas and stream are ready
+  // Transition to preview when both avatar and stream are ready
+  useEffect(() => {
+    if (isAvatarReady && isStreamReady && state === 'loading') {
+      setState('preview');
+    }
+  }, [isAvatarReady, isStreamReady, state]);
+
+  // Initialize recorder when canvas, stream are ready and in preview state
   useEffect(() => {
     const initRecorder = async () => {
       if (canvasRef.current && streamRef.current && state === 'preview' && !isInitialized) {
@@ -75,11 +85,11 @@ export function InterviewSession({ question, onComplete }: InterviewSessionProps
       }
     };
     initRecorder();
-  }, [state, isInitialized, initialize]);
+  }, [state, isInitialized, initialize, isStreamReady]);
 
   // Handle avatar ready
   const handleAvatarReady = useCallback(() => {
-    setState('preview');
+    setIsAvatarReady(true);
   }, []);
 
   // Handle face detection

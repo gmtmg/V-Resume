@@ -197,11 +197,21 @@ export class VRMAvatar {
     const matrix = new THREE.Matrix4().fromArray(matrixData);
     const rotation = new THREE.Euler().setFromRotationMatrix(matrix);
 
-    // Apply smoothed rotation (inverted for mirror effect)
+    // Define rotation limits (in radians)
+    const MAX_ROTATION_X = Math.PI / 6; // 30 degrees up/down
+    const MAX_ROTATION_Y = Math.PI / 4; // 45 degrees left/right
+    const MAX_ROTATION_Z = Math.PI / 8; // 22.5 degrees tilt
+
+    // Calculate target rotation with limits (inverted for mirror effect)
+    const targetX = THREE.MathUtils.clamp(-rotation.x * 0.5, -MAX_ROTATION_X, MAX_ROTATION_X);
+    const targetY = THREE.MathUtils.clamp(rotation.y * 0.5, -MAX_ROTATION_Y, MAX_ROTATION_Y);
+    const targetZ = THREE.MathUtils.clamp(-rotation.z * 0.3, -MAX_ROTATION_Z, MAX_ROTATION_Z);
+
+    // Apply smoothed rotation with clamped values
     const smoothing = 0.3;
-    head.rotation.x = THREE.MathUtils.lerp(head.rotation.x, -rotation.x * 0.5, smoothing);
-    head.rotation.y = THREE.MathUtils.lerp(head.rotation.y, rotation.y * 0.5, smoothing);
-    head.rotation.z = THREE.MathUtils.lerp(head.rotation.z, -rotation.z * 0.3, smoothing);
+    head.rotation.x = THREE.MathUtils.lerp(head.rotation.x, targetX, smoothing);
+    head.rotation.y = THREE.MathUtils.lerp(head.rotation.y, targetY, smoothing);
+    head.rotation.z = THREE.MathUtils.lerp(head.rotation.z, targetZ, smoothing);
   }
 
   // Reset to neutral expression (for face lost)
