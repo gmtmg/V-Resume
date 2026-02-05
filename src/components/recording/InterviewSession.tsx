@@ -18,15 +18,20 @@ export function InterviewSession({ question, onComplete }: InterviewSessionProps
   const [recordingTime, setRecordingTime] = useState(0);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [isFaceDetected, setIsFaceDetected] = useState(false);
+  const [shouldStop, setShouldStop] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const cleanupRef = useRef<() => Promise<void>>();
 
   const { isInitialized, initialize, start, stop, cleanup } = useRecorder({
     pitchRatio: 0.75, // Voice pitch adjustment
   });
+
+  // Keep cleanup function in ref to avoid dependency issues
+  cleanupRef.current = cleanup;
 
   // Cleanup on unmount
   useEffect(() => {
@@ -37,9 +42,9 @@ export function InterviewSession({ question, onComplete }: InterviewSessionProps
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
-      cleanup();
+      cleanupRef.current?.();
     };
-  }, [cleanup]);
+  }, []);
 
   // Initialize camera
   useEffect(() => {
@@ -72,18 +77,6 @@ export function InterviewSession({ question, onComplete }: InterviewSessionProps
     initRecorder();
   }, [state, isInitialized, initialize]);
 
-  // Countdown effect
-  useEffect(() => {
-    if (state === 'countdown') {
-      if (countdown > 0) {
-        const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-        return () => clearTimeout(timer);
-      } else {
-        startRecording();
-      }
-    }
-  }, [state, countdown]);
-
   // Handle avatar ready
   const handleAvatarReady = useCallback(() => {
     setState('preview');
@@ -103,23 +96,7 @@ export function InterviewSession({ question, onComplete }: InterviewSessionProps
     setState('countdown');
   };
 
-  const startRecording = useCallback(() => {
-    start();
-    setState('recording');
-    setRecordingTime(0);
-
-    // Start recording timer
-    timerRef.current = setInterval(() => {
-      setRecordingTime((prev) => {
-        if (prev >= question.maxDuration - 1) {
-          stopRecording();
-          return prev;
-        }
-        return prev + 1;
-      });
-    }, 1000);
-  }, [start, question.maxDuration]);
-
+  // Stop recording function
   const stopRecording = useCallback(async () => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -132,6 +109,44 @@ export function InterviewSession({ question, onComplete }: InterviewSessionProps
       setState('review');
     }
   }, [stop]);
+
+  // Start recording function
+  const startRecording = useCallback(() => {
+    start();
+    setState('recording');
+    setRecordingTime(0);
+    setShouldStop(false);
+
+    // Start recording timer
+    timerRef.current = setInterval(() => {
+      setRecordingTime((prev) => {
+        const newTime = prev + 1;
+        if (newTime >= question.maxDuration) {
+          setShouldStop(true);
+        }
+        return newTime;
+      });
+    }, 1000);
+  }, [start, question.maxDuration]);
+
+  // Countdown effect
+  useEffect(() => {
+    if (state === 'countdown') {
+      if (countdown > 0) {
+        const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+        return () => clearTimeout(timer);
+      } else {
+        startRecording();
+      }
+    }
+  }, [state, countdown, startRecording]);
+
+  // Auto-stop when max duration reached
+  useEffect(() => {
+    if (shouldStop && state === 'recording') {
+      stopRecording();
+    }
+  }, [shouldStop, state, stopRecording]);
 
   const handleRetry = async () => {
     setRecordedBlob(null);
@@ -163,20 +178,20 @@ export function InterviewSession({ question, onComplete }: InterviewSessionProps
   return (
     <div className="space-y-6">
       {/* Question Card */}
-      <div className="bg-gray-800 rounded-lg p-6">
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
         <div className="flex items-start gap-4">
           <div className="w-10 h-10 bg-primary-500 rounded-full flex items-center justify-center flex-shrink-0">
             <span className="text-white font-bold">{question.id}</span>
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-white mb-2">{question.title}</h3>
-            <p className="text-gray-300">{question.question}</p>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">{question.title}</h3>
+            <p className="text-gray-600">{question.question}</p>
           </div>
         </div>
       </div>
 
       {/* Video/Avatar Area */}
-      <div className="relative aspect-video bg-avatar-bg rounded-lg overflow-hidden">
+      <div className="relative aspect-video bg-gradient-to-br from-sky-100 to-cyan-50 rounded-xl overflow-hidden shadow-lg border border-gray-100">
         {/* Hidden video element for camera input (MediaPipe source) */}
         <video
           ref={videoRef}
@@ -205,17 +220,20 @@ export function InterviewSession({ question, onComplete }: InterviewSessionProps
 
         {/* Countdown Overlay */}
         {state === 'countdown' && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-30">
-            <span className="text-8xl font-bold text-white animate-pulse">{countdown}</span>
+          <div className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-sm z-30">
+            <div className="text-center">
+              <span className="text-8xl font-bold text-primary-500 animate-pulse">{countdown}</span>
+              <p className="text-gray-600 mt-2">準備してください</p>
+            </div>
           </div>
         )}
 
         {/* Recording Indicator */}
         {state === 'recording' && (
-          <div className="recording-indicator z-30">
-            <span className="recording-dot" />
+          <div className="absolute top-4 right-4 flex items-center gap-2 bg-rose-500/90 text-white px-4 py-2 rounded-full text-sm font-medium z-30 shadow-lg">
+            <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
             <span>
-              REC {formatTime(recordingTime)} / {formatTime(question.maxDuration)}
+              {formatTime(recordingTime)} / {formatTime(question.maxDuration)}
             </span>
           </div>
         )}
@@ -232,7 +250,7 @@ export function InterviewSession({ question, onComplete }: InterviewSessionProps
 
         {/* Recording disabled warning when face not detected */}
         {state === 'preview' && !isFaceDetected && (
-          <div className="absolute bottom-4 left-4 right-4 bg-yellow-500/90 text-yellow-900 px-4 py-2 rounded-lg text-sm font-medium z-30">
+          <div className="absolute bottom-4 left-4 right-4 bg-amber-50 border border-amber-200 text-amber-700 px-4 py-2 rounded-lg text-sm font-medium z-30 shadow-sm">
             顔が検出されていません。カメラに顔を向けてください。
           </div>
         )}
@@ -240,9 +258,9 @@ export function InterviewSession({ question, onComplete }: InterviewSessionProps
 
       {/* Time Progress Bar */}
       {state === 'recording' && (
-        <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
           <div
-            className="h-full bg-red-500 transition-all duration-1000"
+            className="h-full bg-primary-500 transition-all duration-1000"
             style={{ width: `${(recordingTime / question.maxDuration) * 100}%` }}
           />
         </div>
@@ -251,31 +269,33 @@ export function InterviewSession({ question, onComplete }: InterviewSessionProps
       {/* Action Buttons */}
       <div className="flex justify-center gap-4">
         {state === 'loading' && (
-          <div className="text-gray-400">アバターを準備中...</div>
+          <div className="text-gray-500">アバターを準備中...</div>
         )}
 
         {state === 'preview' && (
           <button
             onClick={startCountdown}
             disabled={!isInitialized}
-            className="py-3 px-8 bg-red-500 hover:bg-red-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-full transition-colors flex items-center gap-2"
+            className="py-3 px-8 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium rounded-full transition-colors flex items-center gap-2"
           >
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="10" />
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            録画を開始
+            {question.title}を開始
           </button>
         )}
 
         {state === 'recording' && (
           <button
             onClick={stopRecording}
-            className="py-3 px-8 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-full transition-colors flex items-center gap-2"
+            className="py-3 px-8 bg-rose-500 hover:bg-rose-600 text-white font-medium rounded-full transition-colors flex items-center gap-2"
           >
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <rect x="6" y="6" width="12" height="12" />
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
             </svg>
-            録画を停止
+            {question.title}を終了
           </button>
         )}
 
@@ -283,7 +303,7 @@ export function InterviewSession({ question, onComplete }: InterviewSessionProps
           <>
             <button
               onClick={handleRetry}
-              className="py-3 px-8 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-full transition-colors"
+              className="py-3 px-8 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-full transition-colors border border-gray-200"
             >
               撮り直す
             </button>
@@ -298,8 +318,8 @@ export function InterviewSession({ question, onComplete }: InterviewSessionProps
       </div>
 
       {/* Privacy Notice */}
-      <p className="text-center text-xs text-gray-500">
-        録画される映像はアバターのみです。あなたの素顔は録画されません。
+      <p className="text-center text-xs text-gray-400">
+        アバター映像のみが保存されます。あなたの素顔は保存されません。
       </p>
     </div>
   );

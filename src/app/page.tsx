@@ -69,7 +69,15 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col relative overflow-hidden">
+      {/* Background Decoration */}
+      <div className="absolute inset-0 -z-10">
+        <div className="absolute top-0 -left-40 w-80 h-80 bg-primary-200/40 rounded-full blur-3xl" />
+        <div className="absolute top-20 -right-40 w-96 h-96 bg-sky-200/40 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 left-1/4 w-72 h-72 bg-cyan-200/30 rounded-full blur-3xl" />
+        <div className="absolute -bottom-20 right-1/3 w-64 h-64 bg-primary-100/50 rounded-full blur-3xl" />
+      </div>
+
       {/* Header */}
       <header className="border-b border-gray-100 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-lg mx-auto px-4 py-4">

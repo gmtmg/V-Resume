@@ -74,10 +74,10 @@ export default function InterviewPage() {
 
   if (!isReady) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-white to-gray-50">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400">準備中...</p>
+          <p className="text-gray-600">準備中...</p>
         </div>
       </div>
     );
@@ -85,25 +85,25 @@ export default function InterviewPage() {
 
   if (isComplete) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-white to-gray-50">
         <div className="text-center space-y-6 p-8 max-w-md">
           {isUploading ? (
             <>
               <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto" />
-              <h2 className="text-2xl font-bold text-white">アップロード中...</h2>
-              <div className="w-full bg-gray-700 rounded-full h-2">
+              <h2 className="text-2xl font-bold text-gray-900">アップロード中...</h2>
+              <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-primary-500 h-2 rounded-full transition-all duration-300"
                   style={{ width: `${uploadProgress}%` }}
                 />
               </div>
-              <p className="text-gray-400 text-sm">
-                録画データを安全にアップロードしています
+              <p className="text-gray-500 text-sm">
+                データを安全にアップロードしています
               </p>
             </>
           ) : (
             <>
-              <div className="w-16 h-16 bg-green-900/30 rounded-full flex items-center justify-center mx-auto">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
                 <svg
                   className="w-8 h-8 text-green-500"
                   fill="none"
@@ -118,20 +118,20 @@ export default function InterviewPage() {
                   />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold text-white">面接が完了しました</h2>
-              <p className="text-gray-400">全ての質問への回答が録画されました。</p>
+              <h2 className="text-2xl font-bold text-gray-900">面接が完了しました</h2>
+              <p className="text-gray-500">全ての質問への回答が完了しました。</p>
 
               {/* Recording Summary */}
-              <div className="bg-gray-800 rounded-lg p-4 text-left">
-                <h3 className="text-sm font-semibold text-gray-400 mb-3">録画内容</h3>
+              <div className="bg-white rounded-xl p-4 text-left shadow-sm border border-gray-100">
+                <h3 className="text-sm font-semibold text-gray-500 mb-3">回答内容</h3>
                 <ul className="space-y-2">
                   {recordings.map((r, i) => (
-                    <li key={r.questionId} className="flex items-center gap-3 text-gray-300 text-sm">
-                      <span className="w-6 h-6 bg-primary-500/20 rounded-full flex items-center justify-center text-primary-400 text-xs">
+                    <li key={r.questionId} className="flex items-center gap-3 text-gray-700 text-sm">
+                      <span className="w-6 h-6 bg-primary-100 rounded-full flex items-center justify-center text-primary-600 text-xs font-medium">
                         {i + 1}
                       </span>
                       <span>{INTERVIEW_QUESTIONS[i].title}</span>
-                      <span className="text-gray-500 ml-auto">{r.duration}秒</span>
+                      <span className="text-gray-400 ml-auto">{r.duration}秒</span>
                     </li>
                   ))}
                 </ul>
@@ -144,7 +144,7 @@ export default function InterviewPage() {
                 送信して完了
               </button>
 
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-400">
                 送信される動画はアバター映像のみです。素顔は含まれません。
               </p>
             </>
@@ -155,24 +155,24 @@ export default function InterviewPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="min-h-screen bg-gradient-to-b from-white to-gray-50">
       {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700">
+      <header className="bg-white/80 backdrop-blur-sm border-b border-gray-100 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-bold text-white">V-Resume</h1>
-            <p className="text-sm text-gray-400">アバター面接</p>
+            <h1 className="text-lg font-bold text-primary-600">V-Resume</h1>
+            <p className="text-sm text-gray-500">アバター面接</p>
           </div>
-          <div className="text-sm text-gray-400">
+          <div className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
             質問 {currentQuestionIndex + 1} / {INTERVIEW_QUESTIONS.length}
           </div>
         </div>
       </header>
 
       {/* Progress Bar */}
-      <div className="bg-gray-800">
-        <div className="max-w-4xl mx-auto px-4">
-          <div className="h-1 bg-gray-700 rounded-full">
+      <div className="bg-white border-b border-gray-100">
+        <div className="max-w-4xl mx-auto px-4 py-2">
+          <div className="h-2 bg-gray-100 rounded-full">
             <div
               className="h-full bg-primary-500 rounded-full transition-all duration-300"
               style={{
