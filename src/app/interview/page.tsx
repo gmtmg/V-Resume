@@ -50,24 +50,60 @@ export default function InterviewPage() {
     setUploadProgress(0);
 
     try {
-      // For MVP: Simulate upload progress
-      // In production: Use actual Supabase upload
       const totalRecordings = recordings.length;
+      const transcripts: Array<{ questionId: number; question: string; answer: string }> = [];
 
+      // Transcribe each recording using Whisper API
       for (let i = 0; i < totalRecordings; i++) {
-        // Simulate upload delay
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        const recording = recordings[i];
+        const question = INTERVIEW_QUESTIONS.find((q) => q.id === recording.questionId);
+
+        try {
+          // Create FormData with the video blob
+          const formData = new FormData();
+          formData.append('audio', recording.blob, `recording_${recording.questionId}.webm`);
+          formData.append('questionId', recording.questionId.toString());
+
+          const response = await fetch('/api/transcribe', {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            transcripts.push({
+              questionId: recording.questionId,
+              question: question?.title || `質問${recording.questionId}`,
+              answer: data.transcript || '',
+            });
+          } else {
+            // If transcription fails, add empty transcript
+            transcripts.push({
+              questionId: recording.questionId,
+              question: question?.title || `質問${recording.questionId}`,
+              answer: '（文字起こしに失敗しました）',
+            });
+          }
+        } catch (transcribeError) {
+          console.error('Transcription error for question', recording.questionId, transcribeError);
+          transcripts.push({
+            questionId: recording.questionId,
+            question: question?.title || `質問${recording.questionId}`,
+            answer: '（文字起こしに失敗しました）',
+          });
+        }
+
         setUploadProgress(((i + 1) / totalRecordings) * 100);
       }
 
-      // Store recording info for complete page
+      // Store recording info and transcripts for complete page
       const recordingInfo = recordings.map((r) => ({
         questionId: r.questionId,
         duration: r.duration,
-        // In production: Store uploaded URLs here
       }));
 
       localStorage.setItem('v-resume-recordings', JSON.stringify(recordingInfo));
+      localStorage.setItem('v-resume-transcripts', JSON.stringify(transcripts));
 
       // Navigate to complete page
       router.push('/complete');
@@ -103,7 +139,7 @@ export default function InterviewPage() {
                 />
               </div>
               <p className="text-gray-500 text-sm">
-                データを安全にアップロードしています
+                音声を文字起こし中...
               </p>
             </>
           ) : (

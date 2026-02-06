@@ -9,9 +9,16 @@ interface RecordingInfo {
   duration: number;
 }
 
+interface TranscriptInfo {
+  questionId: number;
+  question: string;
+  answer: string;
+}
+
 export default function CompletePage() {
   const [showConfetti, setShowConfetti] = useState(true);
   const [recordings, setRecordings] = useState<RecordingInfo[]>([]);
+  const [transcripts, setTranscripts] = useState<TranscriptInfo[]>([]);
   const [summary, setSummary] = useState<string | null>(null);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
 
@@ -19,57 +26,46 @@ export default function CompletePage() {
     const timer = setTimeout(() => setShowConfetti(false), 3000);
 
     // Load recording info from localStorage
-    const stored = localStorage.getItem('v-resume-recordings');
-    if (stored) {
+    const storedRecordings = localStorage.getItem('v-resume-recordings');
+    if (storedRecordings) {
       try {
-        setRecordings(JSON.parse(stored));
+        setRecordings(JSON.parse(storedRecordings));
       } catch (e) {
         console.error('Failed to parse recordings:', e);
+      }
+    }
+
+    // Load transcripts from localStorage
+    const storedTranscripts = localStorage.getItem('v-resume-transcripts');
+    if (storedTranscripts) {
+      try {
+        setTranscripts(JSON.parse(storedTranscripts));
+      } catch (e) {
+        console.error('Failed to parse transcripts:', e);
       }
     }
 
     return () => clearTimeout(timer);
   }, []);
 
-  // Simulate summary generation (in production, this would use actual transcripts)
+  // Generate summary from actual transcripts
   const generateSummary = async () => {
     setIsGeneratingSummary(true);
 
     try {
-      // For MVP demo: Use mock transcripts
-      // In production: Use Whisper to transcribe actual recordings
-      const mockTranscripts = [
-        {
-          question: '自己紹介',
-          answer:
-            '山田太郎と申します。Webエンジニアとして5年間の経験があり、特にフロントエンド開発を専門としています。',
-        },
-        {
-          question: '成功体験・プロジェクト',
-          answer:
-            '前職では新規サービスの立ち上げに参画し、ユーザー数を半年で10倍に成長させることに貢献しました。',
-        },
-        {
-          question: '強みと活かし方',
-          answer:
-            '私の強みは問題解決能力とコミュニケーション力です。技術的な課題を分かりやすく説明し、チームで解決策を見つけることを心がけています。',
-        },
-        {
-          question: '希望条件・環境',
-          answer:
-            'リモートワーク可能な環境を希望しています。また、新しい技術にチャレンジできる会社で働きたいと考えています。',
-        },
-        {
-          question: '企業へのメッセージ',
-          answer:
-            '御社の掲げるミッションに共感しております。ぜひ一緒に良いプロダクトを作っていきたいです。',
-        },
-      ];
+      // Check if we have actual transcripts
+      if (transcripts.length === 0) {
+        setSummary(
+          '【文字起こしデータがありません】\n\n面接の録画から文字起こしを行ってから要約を生成してください。'
+        );
+        return;
+      }
 
+      // Use actual transcripts from Whisper
       const response = await fetch('/api/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcripts: mockTranscripts }),
+        body: JSON.stringify({ transcripts }),
       });
 
       if (response.ok) {
@@ -192,13 +188,34 @@ export default function CompletePage() {
           </ul>
         </div>
 
+        {/* Transcripts Section */}
+        {transcripts.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg">
+            <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">
+              文字起こし結果
+            </h3>
+            <div className="space-y-4">
+              {transcripts.map((t) => (
+                <div key={t.questionId} className="border-l-2 border-primary-200 pl-4">
+                  <p className="text-xs font-medium text-primary-600 mb-1">
+                    {t.question}
+                  </p>
+                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                    {t.answer || '（発話なし）'}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* AI Summary Section */}
         <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-              AI要約
+              AI要約・評価
             </h3>
-            {!summary && !isGeneratingSummary && (
+            {!summary && !isGeneratingSummary && transcripts.length > 0 && (
               <button
                 onClick={generateSummary}
                 className="text-sm text-primary-600 hover:text-primary-700 font-medium"
@@ -217,9 +234,13 @@ export default function CompletePage() {
             <div className="prose prose-sm dark:prose-invert max-w-none">
               <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{summary}</p>
             </div>
+          ) : transcripts.length > 0 ? (
+            <p className="text-gray-400 text-sm">
+              「要約を生成」をクリックすると、AIがあなたの回答内容を要約・評価します。
+            </p>
           ) : (
             <p className="text-gray-400 text-sm">
-              「要約を生成」をクリックすると、AIがあなたの回答内容を要約します。
+              文字起こしデータがありません。面接を録画してから要約を生成してください。
             </p>
           )}
         </div>
