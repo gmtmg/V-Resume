@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { INTERVIEW_QUESTIONS } from '@/types';
 
@@ -16,11 +17,13 @@ interface TranscriptInfo {
 }
 
 export default function CompletePage() {
+  const router = useRouter();
   const [showConfetti, setShowConfetti] = useState(true);
   const [recordings, setRecordings] = useState<RecordingInfo[]>([]);
   const [transcripts, setTranscripts] = useState<TranscriptInfo[]>([]);
   const [summary, setSummary] = useState<string | null>(null);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [hasProfile, setHasProfile] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowConfetti(false), 3000);
@@ -42,6 +45,17 @@ export default function CompletePage() {
         setTranscripts(JSON.parse(storedTranscripts));
       } catch (e) {
         console.error('Failed to parse transcripts:', e);
+      }
+    }
+
+    // Check if profile setup is complete
+    const storedProfile = localStorage.getItem('v-resume-profile');
+    if (storedProfile) {
+      try {
+        const profile = JSON.parse(storedProfile);
+        setHasProfile(!!profile.jobCategory);
+      } catch (e) {
+        console.error('Failed to parse profile:', e);
       }
     }
 
@@ -270,9 +284,30 @@ export default function CompletePage() {
 
         {/* Actions */}
         <div className="flex flex-col gap-3">
+          {!hasProfile ? (
+            <button
+              onClick={() => {
+                // Store summary for profile setup
+                if (summary) {
+                  localStorage.setItem('v-resume-summary', summary);
+                }
+                router.push('/profile/setup');
+              }}
+              className="block w-full py-3 px-6 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-full transition-colors text-center"
+            >
+              プロフィールを設定する
+            </button>
+          ) : (
+            <Link
+              href="/mypage"
+              className="block w-full py-3 px-6 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-full transition-colors text-center"
+            >
+              マイページへ
+            </Link>
+          )}
           <Link
             href="/"
-            className="block w-full py-3 px-6 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-full transition-colors text-center"
+            className="block w-full py-3 px-6 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-full transition-colors text-center"
           >
             トップページへ戻る
           </Link>

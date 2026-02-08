@@ -1,3 +1,5 @@
+import { WorkConditions } from './master';
+
 export interface ProfileData {
   fullName: string;
   email: string;
@@ -5,6 +7,12 @@ export interface ProfileData {
   // These will be collected later (during/after interview)
   desiredJobType?: string;
   experience?: string;
+  // Phase 2 extensions
+  phoneVerified?: boolean;
+  jobCategory?: string;
+  availableLocations?: string[];
+  workConditions?: WorkConditions;
+  isSearchable?: boolean;
 }
 
 export interface ChatMessage {

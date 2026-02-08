@@ -55,8 +55,8 @@ export default function Home() {
 
     localStorage.setItem('v-resume-profile', JSON.stringify(profileData));
 
-    // Navigate to system check
-    router.push('/system-check');
+    // Navigate to phone verification
+    router.push('/verify-phone');
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
