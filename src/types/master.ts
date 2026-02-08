@@ -16,10 +16,13 @@ export interface Location {
   isActive: boolean;
 }
 
+export type EmploymentType = 'fulltime' | 'parttime' | 'contract' | 'freelance';
+export type RemotePreference = 'onsite' | 'hybrid' | 'remote';
+
 export interface WorkConditions {
-  employmentType?: ('fulltime' | 'parttime' | 'contract' | 'freelance')[];
+  employmentType?: EmploymentType[];
   salaryMin?: number;
   salaryMax?: number;
-  remotePreference?: 'onsite' | 'hybrid' | 'remote';
+  remotePreference?: RemotePreference;
   startDate?: string;
 }

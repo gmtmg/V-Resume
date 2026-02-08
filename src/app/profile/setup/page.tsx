@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import type { ProfileData, JobCategory, Location, WorkConditions } from '@/types';
+import type { ProfileData, JobCategory, Location, WorkConditions, EmploymentType } from '@/types';
 
 const EMPLOYMENT_TYPES = [
   { value: 'fulltime', label: '正社員' },
@@ -110,7 +110,7 @@ export default function ProfileSetupPage() {
     );
   };
 
-  const handleEmploymentTypeToggle = (type: WorkConditions['employmentType'][0]) => {
+  const handleEmploymentTypeToggle = (type: EmploymentType) => {
     setWorkConditions((prev) => ({
       ...prev,
       employmentType: prev.employmentType?.includes(type)
