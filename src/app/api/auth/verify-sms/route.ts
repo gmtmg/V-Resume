@@ -68,10 +68,35 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifySMS
 
     // Handle based on purpose
     if (purpose === 'registration') {
-      // Mark phone as verified in profile (will be created later)
+      // Check if profile already exists (returning user via registration flow)
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('phone', normalizedPhone)
+        .single();
+
+      if (existingProfile) {
+        // Check if user has an interview
+        const { data: interview } = await supabase
+          .from('interviews')
+          .select('id')
+          .eq('profile_id', existingProfile.id)
+          .limit(1)
+          .single();
+
+        return NextResponse.json({
+          success: true,
+          verified: true,
+          profileId: existingProfile.id,
+          hasInterview: !!interview,
+        });
+      }
+
+      // New user - will create profile later
       return NextResponse.json({
         success: true,
         verified: true,
+        hasInterview: false,
       });
     } else {
       // Login - find profile and create session

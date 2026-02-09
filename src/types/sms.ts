@@ -33,4 +33,5 @@ export interface VerifySMSResponse {
   error?: string;
   profileId?: string;
   token?: string;
+  hasInterview?: boolean;
 }

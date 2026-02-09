@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { INTERVIEW_QUESTIONS, InterviewRecording } from '@/types';
 import { InterviewSession } from '@/components/recording/InterviewSession';
 
@@ -16,11 +17,58 @@ export default function InterviewPage() {
   const [isReady, setIsReady] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [dailyLimitReached, setDailyLimitReached] = useState(false);
+  const [nextAvailableTime, setNextAvailableTime] = useState<string>('');
 
   const currentQuestion = INTERVIEW_QUESTIONS[currentQuestionIndex];
   const isComplete = currentQuestionIndex >= INTERVIEW_QUESTIONS.length;
 
   useEffect(() => {
+    // Check daily limit first
+    checkDailyLimit();
+  }, []);
+
+  const checkDailyLimit = async () => {
+    try {
+      const sessionData = localStorage.getItem('v-resume-session');
+      if (!sessionData) {
+        // No session - proceed with permission check
+        checkPermissions();
+        return;
+      }
+
+      const session = JSON.parse(sessionData);
+      const res = await fetch(`/api/profile?phone=${encodeURIComponent(session.phone)}`);
+      const data = await res.json();
+
+      if (data.success && data.interview) {
+        const lastRecording = new Date(data.interview.createdAt);
+        const now = new Date();
+        const hoursSinceLastRecording = (now.getTime() - lastRecording.getTime()) / (1000 * 60 * 60);
+
+        if (hoursSinceLastRecording < 24) {
+          // Daily limit reached
+          setDailyLimitReached(true);
+          const nextAvailable = new Date(lastRecording.getTime() + 24 * 60 * 60 * 1000);
+          setNextAvailableTime(nextAvailable.toLocaleString('ja-JP', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          }));
+          return;
+        }
+      }
+
+      // No limit - proceed with permission check
+      checkPermissions();
+    } catch (err) {
+      console.error('Check daily limit error:', err);
+      checkPermissions();
+    }
+  };
+
+  const checkPermissions = () => {
     // Check if we have camera/mic permissions
     navigator.mediaDevices
       .getUserMedia({ video: true, audio: true })
@@ -37,7 +85,7 @@ export default function InterviewPage() {
 
     // Clear any previous recordings on mount
     recordingsStore.length = 0;
-  }, [router]);
+  };
 
   const handleRecordingComplete = useCallback((recording: InterviewRecording) => {
     setRecordings((prev) => [...prev, recording]);
@@ -112,6 +160,35 @@ export default function InterviewPage() {
       setIsUploading(false);
     }
   };
+
+  if (dailyLimitReached) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-white to-gray-50">
+        <div className="text-center space-y-6 p-8 max-w-md">
+          <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto">
+            <svg className="w-8 h-8 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900">本日の撮影上限に達しました</h2>
+          <p className="text-gray-500">
+            動画の撮影は1日1回までとなっています。<br />
+            次回撮影可能な時間までお待ちください。
+          </p>
+          <div className="bg-gray-100 rounded-lg p-4">
+            <p className="text-sm text-gray-500">次回撮影可能時間</p>
+            <p className="text-lg font-bold text-gray-900">{nextAvailableTime}</p>
+          </div>
+          <Link
+            href="/mypage"
+            className="inline-block w-full py-3 px-6 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-full transition-colors text-center"
+          >
+            マイページに戻る
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   if (!isReady) {
     return (

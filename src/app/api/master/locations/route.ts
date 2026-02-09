@@ -8,7 +8,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from('locations')
       .select('*')
-      .eq('is_active', true)
+      .is('is_active', true)
       .order('sort_order');
 
     if (error) {

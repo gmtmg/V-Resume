@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type { ProfileData } from '@/types';
+import type { WorkConditions } from '@/types/master';
 
 interface SessionData {
   profileId: string;
@@ -21,6 +22,27 @@ interface OfferData {
   expiresAt: string;
 }
 
+interface InterviewData {
+  id: string;
+  videoUrl: string;
+  summaryText: string;
+  status: string;
+  createdAt: string;
+}
+
+const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
+  fulltime: '正社員',
+  parttime: 'パート・アルバイト',
+  contract: '契約社員',
+  freelance: '業務委託',
+};
+
+const REMOTE_LABELS: Record<string, string> = {
+  onsite: '出社',
+  hybrid: 'ハイブリッド',
+  remote: 'フルリモート',
+};
+
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   pending: { label: '未確認', color: 'bg-yellow-100 text-yellow-700' },
   viewed: { label: '確認済', color: 'bg-blue-100 text-blue-700' },
@@ -33,12 +55,31 @@ export default function MyPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [interview, setInterview] = useState<InterviewData | null>(null);
   const [offers, setOffers] = useState<OfferData[]>([]);
   const [session, setSession] = useState<SessionData | null>(null);
+  const [locations, setLocations] = useState<Record<string, string>>({});
 
   useEffect(() => {
     loadData();
+    loadLocations();
   }, []);
+
+  const loadLocations = async () => {
+    try {
+      const res = await fetch('/api/master/locations');
+      const data = await res.json();
+      if (data.success) {
+        const locMap: Record<string, string> = {};
+        data.locations.forEach((loc: { code: string; name: string }) => {
+          locMap[loc.code] = loc.name;
+        });
+        setLocations(locMap);
+      }
+    } catch (err) {
+      console.error('Load locations error:', err);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -64,6 +105,9 @@ export default function MyPage() {
         const profileData = await profileRes.json();
         if (profileData.success) {
           setProfile(profileData.profile);
+          if (profileData.interview) {
+            setInterview(profileData.interview);
+          }
         }
 
         await loadOffers(parsedSession.phone);
@@ -164,7 +208,7 @@ export default function MyPage() {
           </div>
 
           {profile ? (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center">
                   <span className="text-2xl font-bold text-primary-500">
@@ -195,11 +239,86 @@ export default function MyPage() {
                   </p>
                 </div>
               </div>
+
+              {/* Work Conditions */}
+              {profile.workConditions && (
+                <div className="pt-4 border-t border-gray-100 space-y-3">
+                  <p className="text-xs text-gray-500 font-medium">勤務条件</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    {profile.workConditions.employmentType && profile.workConditions.employmentType.length > 0 && (
+                      <div>
+                        <p className="text-xs text-gray-400">雇用形態</p>
+                        <p className="text-sm text-gray-900">
+                          {profile.workConditions.employmentType.map(t => EMPLOYMENT_TYPE_LABELS[t] || t).join('、')}
+                        </p>
+                      </div>
+                    )}
+                    {profile.workConditions.remotePreference && (
+                      <div>
+                        <p className="text-xs text-gray-400">働き方</p>
+                        <p className="text-sm text-gray-900">
+                          {REMOTE_LABELS[profile.workConditions.remotePreference] || profile.workConditions.remotePreference}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Available Locations */}
+              {profile.availableLocations && profile.availableLocations.length > 0 && (
+                <div className="pt-4 border-t border-gray-100">
+                  <p className="text-xs text-gray-500 mb-2">勤務可能地域</p>
+                  <div className="flex flex-wrap gap-2">
+                    {profile.availableLocations.map((code) => (
+                      <span
+                        key={code}
+                        className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full"
+                      >
+                        {locations[code] || code}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <p className="text-gray-500">プロフィールが設定されていません</p>
           )}
         </section>
+
+        {/* AI Summary Section */}
+        {interview?.summaryText && (
+          <section className="bg-white rounded-xl p-6 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center">
+                <svg className="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+              </div>
+              <h2 className="text-lg font-bold text-gray-900">AI要約・評価</h2>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-4 mb-4">
+              <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                {interview.summaryText}
+              </p>
+            </div>
+
+            {/* Reassurance Note */}
+            <div className="flex items-start gap-3 p-4 bg-blue-50 rounded-lg">
+              <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div className="text-sm text-blue-800">
+                <p className="font-medium mb-1">ご安心ください</p>
+                <p className="text-blue-700">
+                  この要約は参考情報です。企業の採用担当者は実際にあなたの動画を視聴し、話し方や人柄を直接確認した上で判断します。音声認識の精度に関わらず、あなたの魅力は動画を通じてしっかり伝わります。
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Offers Section */}
         <section className="bg-white rounded-xl p-6 shadow-sm">

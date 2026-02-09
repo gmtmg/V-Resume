@@ -28,6 +28,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'プロフィールが見つかりません' }, { status: 404 });
     }
 
+    // Get latest interview
+    const { data: interview } = await supabase
+      .from('interviews')
+      .select('id, video_url, summary_text, status, created_at')
+      .eq('profile_id', data.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
     return NextResponse.json({
       success: true,
       profile: {
@@ -43,6 +52,13 @@ export async function GET(request: NextRequest) {
         workConditions: data.work_conditions,
         isSearchable: data.is_searchable,
       },
+      interview: interview ? {
+        id: interview.id,
+        videoUrl: interview.video_url,
+        summaryText: interview.summary_text,
+        status: interview.status,
+        createdAt: interview.created_at,
+      } : null,
     });
   } catch (error) {
     console.error('Get profile error:', error);

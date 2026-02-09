@@ -1,4 +1,4 @@
-# V-Resume サービス詳細設計書 (Phase 1: MVP)
+# V-Resume サービス詳細設計書 (Phase 1 & 2)
 
 ## 1. サービス概要
 
@@ -8,6 +8,7 @@
 - **Privacy-First**: 素顔・生声を一切サーバーに送信しない
 - **手軽さ**: 5つの質問に各60秒で回答するだけ
 - **AI活用**: 音声認識と要約生成で採用担当者の負担軽減
+- **マッチング**: 企業と求職者を動画でつなぐプラットフォーム
 
 ---
 
@@ -24,509 +25,482 @@
 | **3D Rendering** | Three.js 0.170, @pixiv/three-vrm 3.3 |
 | **Audio Processing** | Web Audio API (Pitch Shifter) |
 | **AI/LLM** | OpenAI API (Whisper, GPT-4o mini) |
+| **SMS認証** | Twilio |
 
 ### 2.2. フォルダ構成
 
 ```
 /src
-├── app/                    # Next.js App Router
-│   ├── page.tsx           # ランディング/登録ページ
-│   ├── system-check/      # カメラ・マイク確認
-│   ├── interview/         # 面接録画
-│   ├── complete/          # 完了ページ
-│   └── api/               # API Routes
-│       ├── transcribe/    # Whisper文字起こし
-│       └── summarize/     # GPT-4o mini要約
+├── app/                        # Next.js App Router
+│   ├── page.tsx               # ランディング/登録ページ
+│   ├── verify-phone/          # SMS認証 (Phase 2)
+│   ├── login/                 # 求職者ログイン (Phase 2)
+│   ├── system-check/          # カメラ・マイク確認
+│   ├── interview/             # 面接録画
+│   ├── complete/              # 完了ページ
+│   ├── profile/
+│   │   └── setup/             # プロフィール設定 (Phase 2)
+│   ├── mypage/                # 求職者マイページ (Phase 2)
+│   ├── offer-response/
+│   │   └── [id]/              # オファー応答 (Phase 2)
+│   ├── admin/                 # 企業管理画面 (Phase 2)
+│   │   ├── layout.tsx         # 管理画面レイアウト
+│   │   ├── login/             # 企業ログイン
+│   │   ├── register/          # 企業登録
+│   │   ├── dashboard/         # ダッシュボード
+│   │   ├── candidates/        # 求職者検索
+│   │   │   └── [id]/          # 求職者詳細
+│   │   ├── offers/            # オファー管理
+│   │   └── usage/             # 利用状況
+│   └── api/                   # API Routes
+│       ├── transcribe/        # Whisper文字起こし
+│       ├── summarize/         # GPT-4o mini要約
+│       ├── auth/              # 認証 (Phase 2)
+│       │   ├── send-sms/      # SMS送信
+│       │   └── verify-sms/    # SMS認証
+│       ├── profile/           # プロフィール (Phase 2)
+│       │   └── detect-category/ # GPT職種判定
+│       ├── offers/            # オファー (Phase 2)
+│       │   └── [id]/
+│       │       ├── respond/   # オファー応答
+│       │       └── view/      # オファー閲覧
+│       ├── master/            # マスターデータ (Phase 2)
+│       │   ├── job-categories/
+│       │   └── locations/
+│       └── admin/             # 企業API (Phase 2)
+│           ├── auth/
+│           ├── candidates/
+│           ├── offers/
+│           └── usage/
 ├── components/
-│   ├── avatar/            # アバター描画
-│   ├── chat/              # チャットUI (将来用)
-│   └── recording/         # 録画セッション
-├── hooks/                  # カスタムフック
-│   ├── useMediaPipe.ts    # 顔認識
-│   ├── useRecorder.ts     # 録画管理
+│   ├── avatar/                # アバター描画
+│   ├── chat/                  # チャットUI (将来用)
+│   └── recording/             # 録画セッション
+├── hooks/                     # カスタムフック
+│   ├── useMediaPipe.ts        # 顔認識
+│   ├── useRecorder.ts         # 録画管理
 │   └── useProfileStorage.ts
 ├── lib/
-│   ├── audio/             # 音声処理
+│   ├── audio/                 # 音声処理
 │   │   ├── PitchShifter.ts
 │   │   └── CompositeRecorder.ts
-│   ├── avatar/            # VRMアバター
+│   ├── avatar/                # VRMアバター
 │   │   └── VRMAvatar.ts
-│   └── supabase/          # DB連携
-└── types/                  # 型定義
+│   ├── supabase/              # DB連携
+│   │   ├── client.ts          # ブラウザ用
+│   │   ├── server.ts          # SSR用
+│   │   └── admin.ts           # Service Role用 (Phase 2)
+│   └── twilio/                # SMS連携 (Phase 2)
+│       └── index.ts
+└── types/                     # 型定義
     ├── profile.ts
-    └── interview.ts
+    ├── interview.ts
+    ├── company.ts             # (Phase 2)
+    ├── offer.ts               # (Phase 2)
+    ├── master.ts              # (Phase 2)
+    └── sms.ts                 # (Phase 2)
 ```
 
 ---
 
-## 3. デザインシステム
+## 3. Phase 2: マッチングプラットフォーム
 
-### 3.1. カラーパレット
+### 3.1. 求職者フロー
 
-```css
-/* Primary Colors (Sky Blue) */
-primary-50:  #f0f9ff   /* 背景・ハイライト */
-primary-100: #e0f2fe   /* カード背景 */
-primary-200: #bae6fd   /* ボーダー・アクセント */
-primary-300: #7dd3fc   /* ホバー状態 */
-primary-400: #38bdf8   /* フォーカスリング */
-primary-500: #0ea5e9   /* メインアクション */
-primary-600: #0284c7   /* ホバー時 */
-primary-700: #0369a1   /* アクティブ */
-primary-800: #075985   /* 強調テキスト */
-primary-900: #0c4a6e   /* 濃いテキスト */
-
-/* Avatar Background */
-avatar-bg: #f1f5f9     /* ライトグレー */
-
-/* Semantic Colors */
-success: green-500     /* 完了・成功 */
-error: red-500/rose-500 /* エラー・録画中 */
-warning: amber-500     /* 警告・顔未検出 */
+```
+1. 氏名・電話番号入力 (/)
+   ↓
+2. SMS認証コード入力 (/verify-phone)
+   ↓
+3. システムチェック (/system-check)
+   ↓
+4. 動画撮影 (/interview)
+   ↓
+5. プロフィール設定 (/profile/setup)
+   - 職種カテゴリ（GPT自動判定、変更可）
+   - 勤務可能地
+   - 勤務条件
+   ↓
+6. 完了 (/complete)
+   ↓
+7. マイページ (/mypage) ← SMSログインでアクセス
 ```
 
-### 3.2. UIコンポーネント
+### 3.2. 企業フロー
 
-#### フォーム要素
-```css
-.form-input {
-  /* 入力フィールド */
-  padding: 0.75rem 1rem;
-  border-radius: 0.75rem;
-  border: 1px solid gray-200;
-  focus: ring-2 ring-primary-400;
-}
-
-.form-label {
-  /* ラベル */
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: gray-700;
-}
 ```
-
-#### ボタン
-```css
-.btn-primary {
-  /* プライマリボタン */
-  background: primary-500;
-  color: white;
-  padding: 0.75rem 1.5rem;
-  border-radius: 0.75rem;  /* カード内 */
-  border-radius: 9999px;   /* アクション */
-  font-weight: 500;
-}
-
-.btn-secondary {
-  /* セカンダリボタン */
-  background: white;
-  border: 1px solid gray-200;
-  color: gray-700;
-}
-```
-
-#### カード
-```css
-.card {
-  background: white;
-  border-radius: 1rem;
-  border: 1px solid gray-100;
-  box-shadow: sm;
-  padding: 1.5rem;
-}
-```
-
-### 3.3. レイアウトパターン
-
-- **最大幅**: `max-w-lg` (登録), `max-w-2xl` (システムチェック), `max-w-4xl` (面接)
-- **アスペクト比**: `aspect-video` (16:9) - ビデオ/アバター表示
-- **グリッド**: 統計表示に `grid-cols-2`
-- **スペーシング**: `space-y-6`, `space-y-8` が基本
-
-### 3.4. アニメーション
-
-```css
-/* ローディングスピナー */
-border-4 border-primary-500 border-t-transparent rounded-full animate-spin
-
-/* 録画インジケーター */
-animate-pulse (赤い点滅)
-
-/* カウントダウン */
-text-8xl animate-pulse
-
-/* Confetti (完了時) */
-animate-bounce with random delays
+1. 企業登録 (/admin/register)
+   - メールアドレス入力
+   - マジックリンク送信
+   ↓
+2. ダッシュボード (/admin/dashboard)
+   ↓
+3. 求職者検索 (/admin/candidates)
+   - フィルター: 職種、勤務地、条件
+   - 動画閲覧 → 閲覧カウント
+   ↓
+4. オファー送信 (/admin/candidates/[id])
+   - 求職者にSMS通知
+   ↓
+5. 承認待ち (/admin/offers)
+   - 承認されたら電話番号を取得
+   - 求職者は検索から非表示に
 ```
 
 ---
 
-## 4. 画面遷移とUI詳細
+## 4. データベーススキーマ
 
-### 4.1. Landing Page (`/`)
-
-**目的**: ユーザー登録とサービス紹介
-
-**レイアウト**:
-```
-┌─────────────────────────────────────┐
-│ Header: V-Resume ロゴ + タグライン    │
-├─────────────────────────────────────┤
-│  背景装飾 (グラデーション円形ブラー)     │
-│                                     │
-│  ┌─────────────────────────────┐   │
-│  │ アイコン (ビデオカメラ)        │   │
-│  │ "アバター面接で              │   │
-│  │  あなたをアピール"           │   │
-│  │ サブテキスト                 │   │
-│  └─────────────────────────────┘   │
-│                                     │
-│  ┌─────── Card ─────────────┐      │
-│  │ 氏名 *        [入力]      │      │
-│  │ メール *      [入力]      │      │
-│  │ 電話番号 *    [入力]      │      │
-│  │                          │      │
-│  │ [  次へ進む  ]           │      │
-│  └──────────────────────────┘      │
-│                                     │
-│  🛡️ プライバシーノート              │
-└─────────────────────────────────────┘
-```
-
-**バリデーション**:
-- 氏名: 必須、2文字以上
-- メール: 必須、`@`を含む
-- 電話: 必須、10桁以上（数字のみカウント）
-
-**データ保存**:
-- `localStorage['v-resume-profile']` にJSON形式で保存
-
----
-
-### 4.2. System Check (`/system-check`)
-
-**目的**: カメラ・マイク権限の取得とシステム互換性確認
-
-**レイアウト**:
-```
-┌─────────────────────────────────────┐
-│ Header: V-Resume / システムチェック   │
-├─────────────────────────────────────┤
-│  ┌─────────────────────────────┐   │
-│  │      ビデオプレビュー         │   │
-│  │      (ミラー表示)            │   │
-│  └─────────────────────────────┘   │
-│                                     │
-│  ┌─────── チェックリスト ─────────┐  │
-│  │ ブラウザ互換性    [✓] / [✗]   │  │
-│  │ カメラ           [✓] / [✗]   │  │
-│  │ マイク           [✓] / [✗]   │  │
-│  │ 顔認識           [✓] / [✗]   │  │
-│  └──────────────────────────────┘  │
-│                                     │
-│  (エラー時: 詳細説明 + 解決策)        │
-│                                     │
-│  [カメラ・マイクを許可する]          │
-│  または                             │
-│  [面接を開始する] (全て✓の場合)       │
-└─────────────────────────────────────┘
-```
-
-**チェック項目**:
-1. **ブラウザ互換性**: getUserMedia, MediaRecorder, AudioContext, captureStream
-2. **HTTPS/セキュアコンテキスト**: モバイルで必須
-3. **カメラ/マイク権限**: getUserMedia呼び出し
-4. **顔認識**: MediaPipe初期化確認
-
-**エラーハンドリング**:
-- `NotAllowedError`: iOS/Android別の権限設定手順を表示
-- `NotFoundError`: デバイス未接続
-- `OverconstrainedError`: 最小制約でリトライ
-- `NotReadableError`: 他アプリ使用中
-
----
-
-### 4.3. Interview Page (`/interview`)
-
-**目的**: 5つの質問への回答録画
-
-**レイアウト**:
-```
-┌─────────────────────────────────────┐
-│ Header: V-Resume / 質問 X/5         │
-├─────────────────────────────────────┤
-│ [==========>----------] 進捗バー     │
-├─────────────────────────────────────┤
-│                                     │
-│  ┌─────── 質問カード ──────────┐    │
-│  │ (1) 自己紹介                 │    │
-│  │ まずは簡単に自己紹介を...     │    │
-│  └──────────────────────────────┘   │
-│                                     │
-│  ┌─────── アバター表示 ─────────┐   │
-│  │                             │   │
-│  │   [3D VRMアバター]          │   │
-│  │   (顔トラッキング連動)       │   │
-│  │                             │   │
-│  │   [REC 0:35 / 1:00] (録画時) │   │
-│  │   ⚠️顔を中央に... (未検出時)  │   │
-│  └─────────────────────────────┘   │
-│                                     │
-│  [========>   ] 残り時間バー         │
-│                                     │
-│  [▶ 自己紹介を開始]                  │
-│  または                             │
-│  [■ 自己紹介を終了] (録画中)         │
-│  または                             │
-│  [撮り直す] [次の質問へ] (レビュー時)  │
-│                                     │
-│  📝 アバター映像のみ保存されます       │
-└─────────────────────────────────────┘
-```
-
-**セッション状態**:
-1. `loading`: アバター・MediaPipe初期化中
-2. `preview`: 準備完了、開始待ち
-3. `countdown`: 3-2-1カウントダウン
-4. `recording`: 録画中（最大60秒）
-5. `review`: 録画確認、撮り直し/次へ選択
-
-**録画フロー**:
-1. Canvas (アバター映像) + 加工音声 (0.75倍ピッチ) を合成
-2. MediaRecorder で WebM/MP4 形式で保存
-3. 5問完了後、Whisper APIで文字起こし
-4. 完了ページへ遷移
-
----
-
-### 4.4. Complete Page (`/complete`)
-
-**目的**: 登録完了通知と結果表示
-
-**レイアウト**:
-```
-┌─────────────────────────────────────┐
-│  🎉 Confetti (3秒間)                │
-│                                     │
-│      ✓ 大きなチェックアイコン         │
-│                                     │
-│      登録が完了しました!              │
-│      企業からのスカウトをお待ちください │
-│                                     │
-│  ┌─────── 録画内容 ──────────────┐  │
-│  │ [5] 回答数  [3:45] 総録画時間  │  │
-│  │                               │  │
-│  │ ✓ 自己紹介          45秒      │  │
-│  │ ✓ 成功体験          52秒      │  │
-│  │ ✓ 強みと活かし方     38秒      │  │
-│  │ ✓ 希望条件          41秒      │  │
-│  │ ✓ 企業へのメッセージ  49秒      │  │
-│  └───────────────────────────────┘ │
-│                                     │
-│  ┌─────── 文字起こし結果 ─────────┐  │
-│  │ 自己紹介:                      │  │
-│  │ 「山田と申します。これまで...」  │  │
-│  │ (各質問の回答テキスト)          │  │
-│  └───────────────────────────────┘ │
-│                                     │
-│  ┌─────── AI要約・評価 ──────────┐  │
-│  │ [要約を生成] ボタン            │  │
-│  │ または                        │  │
-│  │ 生成された要約文 (300-400字)   │  │
-│  └───────────────────────────────┘ │
-│                                     │
-│  🔒 プライバシーノート               │
-│  (素顔・生声は保存されていません)     │
-│                                     │
-│  [トップページへ戻る]                │
-└─────────────────────────────────────┘
-```
-
----
-
-## 5. コンポーネント設計
-
-### 5.1. AvatarRenderer
-
-**責務**: 顔トラッキングとVRMアバターの連動描画
-
-**Props**:
-```typescript
-interface AvatarRendererProps {
-  vrmPath?: string;                           // VRMモデルパス
-  videoRef: RefObject<HTMLVideoElement>;      // カメラ入力
-  canvasRef: RefObject<HTMLCanvasElement>;    // 描画先
-  onReady?: () => void;                       // 初期化完了
-  onFaceDetected?: () => void;                // 顔検出
-  onFaceLost?: () => void;                    // 顔ロスト
-}
-```
-
-**内部状態**:
-- `isAvatarLoading`: VRMモデル読み込み中
-- `isMediaPipeLoading`: MediaPipe初期化中
-- `isFaceDetected`: 顔検出状態
-
-**オーバーレイ表示**:
-- Loading: スピナー + 「アバターを読み込み中...」
-- Error: 警告アイコン + エラーメッセージ
-- Face Lost: 目のアイコン + 「顔を中央に配置してください」
-
----
-
-### 5.2. InterviewSession
-
-**責務**: 1つの質問に対する録画セッション管理
-
-**Props**:
-```typescript
-interface InterviewSessionProps {
-  question: InterviewQuestion;
-  onComplete: (recording: InterviewRecording) => void;
-}
-```
-
-**セッション状態マシン**:
-```
-loading → preview → countdown → recording → review
-                ↑                            │
-                └────────── (retry) ─────────┘
-```
-
-**機能**:
-- カウントダウン (3-2-1)
-- 録画タイマー表示
-- 自動停止 (60秒)
-- レビュー再生
-- 撮り直し機能
-
----
-
-## 6. API設計
-
-### 6.1. POST `/api/transcribe`
-
-**目的**: 音声から日本語テキストへの変換
-
-**Request**:
-```
-Content-Type: multipart/form-data
-
-audio: File (WebM/MP4)
-questionId: string
-```
-
-**Response**:
-```json
-{
-  "questionId": 1,
-  "transcript": "自己紹介のテキスト内容..."
-}
-```
-
-**実装詳細**:
-- OpenAI Whisper API (`whisper-1`)
-- 言語: 日本語 (`ja`)
-- レスポンス形式: テキスト
-
----
-
-### 6.2. POST `/api/summarize`
-
-**目的**: 面接回答の要約・評価生成
-
-**Request**:
-```json
-{
-  "transcripts": [
-    {
-      "questionId": 1,
-      "question": "自己紹介",
-      "answer": "回答テキスト..."
-    }
-  ]
-}
-```
-
-**Response**:
-```json
-{
-  "summary": "この候補者は...（300-400字の要約）"
-}
-```
-
-**実装詳細**:
-- OpenAI GPT-4o mini
-- システムプロンプトで氏名を除外するよう指示
-- 採用担当者向けの客観的評価
-
----
-
-## 7. データ構造
-
-### 7.1. TypeScript型定義
-
-```typescript
-// プロファイル
-interface ProfileData {
-  fullName: string;
-  email: string;
-  phone: string;
-}
-
-// 面接質問
-interface InterviewQuestion {
-  id: number;
-  title: string;
-  question: string;
-  maxDuration: number;  // 秒
-}
-
-// 録画データ
-interface InterviewRecording {
-  questionId: number;
-  blob: Blob;
-  duration: number;
-  uploadedUrl?: string;
-}
-```
-
-### 7.2. 面接質問リスト
-
-| ID | タイトル | 質問文 | 最大時間 |
-|----|---------|--------|---------|
-| 1 | 自己紹介 | まずは簡単に自己紹介をお願いします。お名前と、これまでのキャリアについて教えてください。 | 60秒 |
-| 2 | 成功体験・プロジェクト | 過去の成功体験や、特に注力されたプロジェクトについて教えてください。 | 60秒 |
-| 3 | 強みと活かし方 | ご自身の強みと、それを仕事にどう活かしているかを教えてください。 | 60秒 |
-| 4 | 希望条件・環境 | 希望する勤務条件や、働きたい環境について教えてください。 | 60秒 |
-| 5 | 企業へのメッセージ | 最後に、企業の採用担当者に向けてメッセージをお願いします。 | 60秒 |
-
-### 7.3. Supabaseテーブル
+### 4.1. Phase 1 テーブル
 
 **`profiles` テーブル (Private)**
 ```sql
 id: UUID (Primary Key)
-full_name: string
-email: string
-phone: string
-created_at: timestamp
+full_name: VARCHAR(100)
+email: VARCHAR(255) UNIQUE
+phone: VARCHAR(20)
+desired_job_type: VARCHAR(200)
+experience: TEXT
+created_at: TIMESTAMPTZ
+updated_at: TIMESTAMPTZ
+-- Phase 2 追加カラム
+phone_verified: BOOLEAN DEFAULT FALSE
+job_category: VARCHAR(100)
+available_locations: TEXT[]
+work_conditions: JSONB
+is_searchable: BOOLEAN DEFAULT TRUE
+auth_user_id: UUID
 ```
 
 **`interviews` テーブル (Public/Scoutable)**
 ```sql
-id: UUID
-profile_id: UUID (Foreign Key)
-video_url: string (Supabase Storage URL)
-summary_text: text (AI generated)
-status: enum ('pending', 'approved', 'private')
-created_at: timestamp
+id: UUID (Primary Key)
+profile_id: UUID (Foreign Key → profiles)
+video_url: TEXT
+summary_text: TEXT
+status: ENUM ('pending', 'approved', 'private')
+created_at: TIMESTAMPTZ
+updated_at: TIMESTAMPTZ
+```
+
+### 4.2. Phase 2 テーブル
+
+**`companies` テーブル（企業）**
+```sql
+id: UUID (Primary Key)
+name: VARCHAR(200)
+email: VARCHAR(255) UNIQUE
+auth_user_id: UUID
+plan_type: VARCHAR(50) DEFAULT 'free'
+monthly_view_limit: INTEGER DEFAULT 10
+views_used_this_month: INTEGER DEFAULT 0
+billing_reset_date: DATE
+is_active: BOOLEAN DEFAULT TRUE
+created_at: TIMESTAMPTZ
+updated_at: TIMESTAMPTZ
+```
+
+**`sms_verifications` テーブル（SMS認証）**
+```sql
+id: UUID (Primary Key)
+phone: VARCHAR(20)
+code: VARCHAR(6)
+purpose: VARCHAR(50)  -- 'registration' or 'login'
+is_used: BOOLEAN DEFAULT FALSE
+attempts: INTEGER DEFAULT 0
+expires_at: TIMESTAMPTZ
+created_at: TIMESTAMPTZ
+```
+
+**`video_views` テーブル（閲覧ログ）**
+```sql
+id: UUID (Primary Key)
+company_id: UUID (Foreign Key → companies)
+interview_id: UUID (Foreign Key → interviews)
+profile_id: UUID (Foreign Key → profiles)
+view_token: VARCHAR(100) UNIQUE
+viewed_at: TIMESTAMPTZ
+billing_period: DATE
+UNIQUE(company_id, interview_id, billing_period)
+```
+
+**`offers` テーブル（オファー）**
+```sql
+id: UUID (Primary Key)
+company_id: UUID (Foreign Key → companies)
+profile_id: UUID (Foreign Key → profiles)
+interview_id: UUID (Foreign Key → interviews)
+message: TEXT
+position_title: VARCHAR(200)
+status: ENUM ('pending', 'viewed', 'accepted', 'rejected', 'expired')
+accept_token: VARCHAR(100) UNIQUE
+reject_token: VARCHAR(100) UNIQUE
+sent_at: TIMESTAMPTZ
+viewed_at: TIMESTAMPTZ
+responded_at: TIMESTAMPTZ
+expires_at: TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '14 days')
+```
+
+**`job_categories` テーブル（職種マスター）**
+```sql
+id: UUID (Primary Key)
+code: VARCHAR(50) UNIQUE
+name: VARCHAR(100)
+parent_code: VARCHAR(50)
+sort_order: INTEGER
+is_active: BOOLEAN DEFAULT TRUE
+```
+
+**`locations` テーブル（勤務地マスター）**
+```sql
+id: UUID (Primary Key)
+code: VARCHAR(10) UNIQUE
+name: VARCHAR(50)
+region: VARCHAR(50)
+sort_order: INTEGER
+is_active: BOOLEAN DEFAULT TRUE
+```
+
+### 4.3. ER図
+
+```
+┌─────────────┐     ┌─────────────┐
+│  profiles   │────▶│ interviews  │
+│  (求職者)    │     │ (面接動画)   │
+└─────────────┘     └─────────────┘
+       │                   │
+       │    ┌──────────────┘
+       ▼    ▼
+┌─────────────┐     ┌─────────────┐
+│   offers    │◀────│  companies  │
+│ (オファー)   │     │  (企業)     │
+└─────────────┘     └─────────────┘
+       │                   │
+       │                   ▼
+       │            ┌─────────────┐
+       └───────────▶│ video_views │
+                    │ (閲覧ログ)   │
+                    └─────────────┘
+
+┌─────────────────┐  ┌─────────────┐
+│sms_verifications│  │job_categories│
+│  (SMS認証)       │  │ (職種)       │
+└─────────────────┘  └─────────────┘
+
+┌─────────────┐
+│  locations  │
+│ (勤務地)    │
+└─────────────┘
 ```
 
 ---
 
-## 8. プライバシー・セキュリティ設計
+## 5. API設計
 
-### 8.1. Privacy-First アーキテクチャ
+### 5.1. Phase 1 API
+
+| Method | Endpoint | 説明 |
+|--------|----------|------|
+| POST | `/api/transcribe` | Whisper音声→テキスト変換 |
+| POST | `/api/summarize` | GPT-4o mini 面接要約生成 |
+
+### 5.2. Phase 2 API
+
+#### 認証系
+| Method | Endpoint | 説明 |
+|--------|----------|------|
+| POST | `/api/auth/send-sms` | Twilio経由でSMS送信 |
+| POST | `/api/auth/verify-sms` | 認証コード確認 |
+
+#### 求職者系
+| Method | Endpoint | 説明 |
+|--------|----------|------|
+| GET/POST | `/api/profile` | プロフィール取得・更新 |
+| POST | `/api/profile/detect-category` | GPTで職種カテゴリ判定 |
+| GET | `/api/offers` | 自分へのオファー一覧 |
+| POST | `/api/offers/[id]/respond` | オファー承認/拒否 |
+| POST | `/api/offers/[id]/view` | オファー閲覧マーク |
+
+#### 企業系
+| Method | Endpoint | 説明 |
+|--------|----------|------|
+| POST | `/api/admin/auth/register` | 企業登録 |
+| POST | `/api/admin/auth/send-magic-link` | マジックリンク送信 |
+| POST | `/api/admin/auth/verify` | 企業認証確認 |
+| GET | `/api/admin/candidates` | 求職者一覧（フィルター付き） |
+| POST | `/api/admin/candidates/[id]/view` | 動画閲覧記録 |
+| GET/POST | `/api/admin/offers` | オファー一覧・送信 |
+| GET | `/api/admin/usage` | 閲覧数・利用状況 |
+
+#### マスターデータ
+| Method | Endpoint | 説明 |
+|--------|----------|------|
+| GET | `/api/master/job-categories` | 職種一覧 |
+| GET | `/api/master/locations` | 勤務地一覧 |
+
+---
+
+## 6. 認証設計
+
+### 6.1. 求職者認証（SMS）
+
+```
+┌─────────┐    ┌─────────┐    ┌─────────┐
+│ ユーザー │    │ Server  │    │ Twilio  │
+└────┬────┘    └────┬────┘    └────┬────┘
+     │              │              │
+     │ 電話番号入力  │              │
+     │─────────────▶│              │
+     │              │ SMS送信依頼  │
+     │              │─────────────▶│
+     │              │   成功応答   │
+     │              │◀─────────────│
+     │              │              │
+     │ 6桁コード入力 │     SMS      │
+     │◀─────────────│◀─────────────│
+     │─────────────▶│              │
+     │              │ DB検証       │
+     │  認証完了    │              │
+     │◀─────────────│              │
+```
+
+**セキュリティ対策**:
+- 認証コード: 6桁数字
+- 有効期限: 10分
+- 試行回数: 最大5回
+- レート制限: 1時間に5通まで
+
+### 6.2. 企業認証（マジックリンク）
+
+Supabase Auth のメールOTP機能を使用。
+
+---
+
+## 7. 課金・閲覧制限
+
+### 7.1. プラン
+
+| プラン | 月額 | 動画閲覧数 |
+|--------|------|-----------|
+| Free | ¥0 | 10件/月 |
+| Basic | ¥9,800 | 50件/月 |
+| Premium | ¥29,800 | 200件/月 |
+
+### 7.2. 閲覧カウントロジック
+
+- 同一企業・同一面接は**月1回のみカウント**
+- `video_views`テーブルの`billing_period`で管理
+- 月初に`views_used_this_month`をリセット
+
+```sql
+-- 閲覧記録関数
+CREATE FUNCTION record_video_view(
+    p_company_id UUID,
+    p_interview_id UUID,
+    p_profile_id UUID
+) RETURNS JSONB
+```
+
+---
+
+## 8. デザインシステム
+
+### 8.1. カラーパレット
+
+```css
+/* Primary Colors (Sky Blue) */
+primary-50:  #f0f9ff
+primary-500: #0ea5e9   /* メインアクション */
+primary-600: #0284c7   /* ホバー時 */
+
+/* Semantic Colors */
+success: green-500     /* 完了・承認 */
+error: red-500         /* エラー・録画中 */
+warning: amber-500     /* 警告 */
+```
+
+### 8.2. 管理画面デザイン
+
+- ナビゲーション: 上部固定バー
+- サイドバー: なし（シンプル構成）
+- カード: 白背景 + shadow-sm
+- テーブル: ストライプなし、ホバーで背景色変更
+
+---
+
+## 9. 画面一覧
+
+### 9.1. 求職者向け
+
+| パス | 画面名 | 説明 |
+|------|--------|------|
+| `/` | トップ | 登録フォーム |
+| `/verify-phone` | SMS認証 | 認証コード入力 |
+| `/login` | ログイン | SMS認証でログイン |
+| `/system-check` | システムチェック | カメラ・マイク確認 |
+| `/interview` | 面接 | アバター録画 |
+| `/profile/setup` | プロフィール設定 | 職種・勤務地選択 |
+| `/complete` | 完了 | 結果表示 |
+| `/mypage` | マイページ | オファー確認 |
+| `/offer-response/[id]` | オファー応答 | 承認/辞退 |
+
+### 9.2. 企業向け
+
+| パス | 画面名 | 説明 |
+|------|--------|------|
+| `/admin/login` | ログイン | マジックリンク認証 |
+| `/admin/register` | 登録 | 企業アカウント作成 |
+| `/admin/dashboard` | ダッシュボード | 統計・概要 |
+| `/admin/candidates` | 求職者検索 | フィルター・一覧 |
+| `/admin/candidates/[id]` | 求職者詳細 | 動画閲覧・オファー送信 |
+| `/admin/offers` | オファー管理 | 送信済みオファー一覧 |
+| `/admin/usage` | 利用状況 | 閲覧数・プラン |
+
+---
+
+## 10. 環境変数
+
+```env
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+
+# OpenAI
+OPENAI_API_KEY=sk-...
+
+# Twilio SMS (Phase 2)
+TWILIO_ACCOUNT_SID=ACxxxxxxxx
+TWILIO_AUTH_TOKEN=xxxxxxxx
+TWILIO_PHONE_NUMBER=+1234567890
+
+# App Settings
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+---
+
+## 11. 開発コマンド
+
+```bash
+# 開発サーバー
+npm run dev
+
+# ビルド
+npm run build
+
+# Lint
+npm run lint
+
+# 開発サーバー再起動
+pkill -f "next dev" && npm run dev
+```
+
+---
+
+## 12. セキュリティ・プライバシー
+
+### 12.1. Privacy-First アーキテクチャ
 
 ```
 [ユーザーのカメラ]
@@ -541,114 +515,20 @@ created_at: timestamp
 [サーバー] ←── アバター映像のみ
 ```
 
-### 8.2. 音声プライバシー
+### 12.2. データ保護
 
-```
-[マイク入力]
-     │
-     ▼
-[PitchShifter] ←── ピッチ0.75倍に変換
-     │
-     ▼
-[加工済み音声] → 録画・サーバー送信
-```
-
-### 8.3. 実装ポイント
-
-1. **Canvas Only Recording**: `canvas.captureStream()` でアバター映像のみ取得
-2. **Audio Processing**: Web Audio API でリアルタイム変換後に合成
-3. **No Raw Storage**: 生の映像・音声はメモリ上でのみ処理
-4. **Client-side Processing**: 顔認識はすべてブラウザ内で完結
+- 素顔・生声: サーバーに送信しない
+- 電話番号: オファー承認後のみ企業に開示
+- RLS: 自分のデータのみアクセス可能
 
 ---
 
-## 9. モバイル対応
+## 13. 今後の拡張予定 (Phase 3以降)
 
-### 9.1. iOS Safari
-
-- `playsinline` 属性必須
-- `webkit-playsinline` 属性追加
-- シンプルなConstraintsから開始 (`facingMode: 'user'`)
-- OverconstrainedError時のフォールバック
-
-### 9.2. Android Chrome
-
-- アプリ権限とサイト権限の両方が必要
-- 権限拒否時の詳細な手順表示
-- 最小Constraints でのリトライ機能
-
-### 9.3. 共通対応
-
-- HTTPS必須 (getUserMedia要件)
-- デバイス別エラーメッセージ
-- 解像度の段階的フォールバック
-
----
-
-## 10. 今後の拡張予定 (Phase 2以降)
-
-### 10.1. チャット形式プロファイル入力
-- LINEライクなUI
-- 1問ずつAIが質問
-- 既存の `chat/` コンポーネントを活用
-
-### 10.2. アバターカスタマイズ
-- 複数VRMモデル選択
-- 背景色・スタイル変更
-- アクセサリ追加
-
-### 10.3. 企業向けダッシュボード
-- 候補者一覧表示
-- フィルタリング・検索
-- スカウトメッセージ送信
-
-### 10.4. リアルタイム面接
-- WebRTC対応
-- ライブアバター対話
-- 録画機能との統合
-
----
-
-## 11. 開発環境セットアップ
-
-### 11.1. 必要な環境変数
-
-```env
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
-
-# OpenAI
-OPENAI_API_KEY=your_openai_key
-```
-
-### 11.2. コマンド
-
-```bash
-# 開発サーバー
-npm run dev
-
-# ビルド
-npm run build
-
-# Lint
-npm run lint
-```
-
-### 11.3. 依存パッケージ (主要)
-
-```json
-{
-  "next": "14.2.21",
-  "react": "18.3.1",
-  "three": "0.170.0",
-  "@pixiv/three-vrm": "3.3.2",
-  "@mediapipe/tasks-vision": "0.10.18",
-  "openai": "4.77.0",
-  "@supabase/supabase-js": "2.47.10",
-  "tailwindcss": "3.4.17"
-}
-```
+- アバターカスタマイズ（複数VRMモデル選択）
+- リアルタイム面接（WebRTC）
+- 決済機能（Stripe連携）
+- 分析ダッシュボード
 
 ---
 

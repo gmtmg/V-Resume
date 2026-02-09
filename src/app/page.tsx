@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { ProfileData } from '@/types';
 
 export default function Home() {
@@ -13,6 +14,44 @@ export default function Home() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasSession, setHasSession] = useState(false);
+  const [hasInterview, setHasInterview] = useState(false);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
+
+  useEffect(() => {
+    checkSession();
+  }, []);
+
+  const checkSession = async () => {
+    try {
+      const sessionData = localStorage.getItem('v-resume-session');
+      if (sessionData) {
+        const session = JSON.parse(sessionData);
+        setHasSession(true);
+
+        // Check if user has completed interview
+        const res = await fetch(`/api/profile?phone=${encodeURIComponent(session.phone)}`);
+        const data = await res.json();
+        if (data.success && data.interview) {
+          setHasInterview(true);
+        }
+      }
+    } catch (err) {
+      console.error('Check session error:', err);
+    } finally {
+      setIsCheckingSession(false);
+    }
+  };
+
+  const handleMyPageClick = () => {
+    if (hasSession && hasInterview) {
+      router.push('/mypage');
+    } else if (hasSession) {
+      router.push('/system-check');
+    } else {
+      router.push('/login');
+    }
+  };
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -80,9 +119,22 @@ export default function Home() {
 
       {/* Header */}
       <header className="border-b border-gray-100 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-lg mx-auto px-4 py-4">
-          <h1 className="text-xl font-bold text-primary-600">V-Resume</h1>
-          <p className="text-sm text-gray-500">プライバシー特化型スカウト登録</p>
+        <div className="max-w-lg mx-auto px-4 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-primary-600">V-Resume</h1>
+            <p className="text-sm text-gray-500">プライバシー特化型スカウト登録</p>
+          </div>
+          {!isCheckingSession && (
+            <button
+              onClick={handleMyPageClick}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              マイページ
+            </button>
+          )}
         </div>
       </header>
 

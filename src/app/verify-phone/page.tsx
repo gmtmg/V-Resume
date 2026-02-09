@@ -116,7 +116,21 @@ export default function VerifyPhonePage() {
           profile.phoneVerified = true;
           localStorage.setItem('v-resume-profile', JSON.stringify(profile));
         }
-        router.push('/system-check');
+
+        // Save session for persistent login
+        const sessionData = {
+          profileId: data.profileId || '',
+          phone: phone,
+          loggedInAt: new Date().toISOString(),
+        };
+        localStorage.setItem('v-resume-session', JSON.stringify(sessionData));
+
+        // Check if user already has an interview (returning user)
+        if (data.hasInterview) {
+          router.push('/mypage');
+        } else {
+          router.push('/system-check');
+        }
       } else {
         setError(data.error || '認証に失敗しました');
         setCode(['', '', '', '', '', '']);
