@@ -33,8 +33,9 @@ export default function AdminLoginPage() {
       if (data.success) {
         // TODO: REMOVE - ダミー認証バイパス処理（テスト用）
         if (data.bypass) {
-          localStorage.setItem('v-resume-admin-session', JSON.stringify({
+          localStorage.setItem('v-resume-company-session', JSON.stringify({
             companyId: data.companyId,
+            companyName: 'テスト企業',
             email,
             loggedInAt: new Date().toISOString(),
           }));
