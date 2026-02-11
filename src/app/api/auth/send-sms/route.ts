@@ -19,6 +19,15 @@ export async function POST(request: NextRequest): Promise<NextResponse<SendSMSRe
     const normalizedPhone = normalizePhoneNumber(phone);
     const supabase = createAdminClient();
 
+    // TODO: REMOVE - ダミー認証バイパス（テスト用）
+    if (normalizedPhone === '+810000000000') {
+      return NextResponse.json({
+        success: true,
+        message: 'テスト用: 認証コード 999999 を入力してください',
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      });
+    }
+
     // Check rate limiting - max 5 SMS per phone per hour
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const { count } = await supabase
