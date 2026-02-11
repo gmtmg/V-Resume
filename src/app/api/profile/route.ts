@@ -76,6 +76,15 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedPhone = normalizePhoneNumber(phone);
+
+    // TODO: REMOVE - ダミー認証バイパス（テスト用）
+    if (normalizedPhone.includes('0000000')) {
+      return NextResponse.json({
+        success: true,
+        profileId: 'test-profile-id',
+      });
+    }
+
     const supabase = createAdminClient();
 
     // Check if profile exists
