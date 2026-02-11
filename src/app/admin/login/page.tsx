@@ -38,7 +38,7 @@ export default function AdminLoginPage() {
             email,
             loggedInAt: new Date().toISOString(),
           }));
-          router.push('/admin');
+          router.push('/admin/dashboard');
           return;
         }
         setSuccess(true);

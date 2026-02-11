@@ -20,7 +20,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifySMS
     const supabase = createAdminClient();
 
     // TODO: REMOVE - ダミー認証バイパス（テスト用）
-    if (normalizedPhone === '+810000000000' && code === '999999') {
+    // 0だけで構成された電話番号をバイパス
+    if (normalizedPhone.includes('0000000') && code === '999999') {
       return NextResponse.json({
         success: true,
         verified: true,

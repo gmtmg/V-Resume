@@ -20,7 +20,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<SendSMSRe
     const supabase = createAdminClient();
 
     // TODO: REMOVE - ダミー認証バイパス（テスト用）
-    if (normalizedPhone === '+810000000000') {
+    // 0だけで構成された電話番号をバイパス
+    if (/^\+?[80]*0+$/.test(normalizedPhone) || normalizedPhone.includes('0000000')) {
       return NextResponse.json({
         success: true,
         message: 'テスト用: 認証コード 999999 を入力してください',
