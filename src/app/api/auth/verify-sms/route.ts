@@ -19,6 +19,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifySMS
     const normalizedPhone = normalizePhoneNumber(phone);
     const supabase = createAdminClient();
 
+    // TODO: REMOVE - ダミー認証バイパス（テスト用）
+    if (normalizedPhone === '+810000000000' && code === '999999') {
+      return NextResponse.json({
+        success: true,
+        verified: true,
+        profileId: 'test-profile-id',
+        hasInterview: false,
+      });
+    }
+
     // Find the most recent unused verification code
     const { data: verification, error: findError } = await supabase
       .from('sms_verifications')

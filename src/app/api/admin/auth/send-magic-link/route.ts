@@ -9,6 +9,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'メールアドレスが必要です' }, { status: 400 });
     }
 
+    // TODO: REMOVE - ダミー認証バイパス（テスト用）
+    if (email === 'test@test.com') {
+      return NextResponse.json({
+        success: true,
+        bypass: true,
+        companyId: 'test-company-id',
+        message: 'テストログイン - バイパスモード',
+      });
+    }
+
     const supabase = createAdminClient();
 
     // Check if company exists

@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 export default function AdminLoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -29,6 +31,16 @@ export default function AdminLoginPage() {
       const data = await response.json();
 
       if (data.success) {
+        // TODO: REMOVE - ダミー認証バイパス処理（テスト用）
+        if (data.bypass) {
+          localStorage.setItem('v-resume-admin-session', JSON.stringify({
+            companyId: data.companyId,
+            email,
+            loggedInAt: new Date().toISOString(),
+          }));
+          router.push('/admin');
+          return;
+        }
         setSuccess(true);
       } else {
         setError(data.error || 'ログインに失敗しました');
